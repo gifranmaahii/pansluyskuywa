@@ -98,21 +98,36 @@ bot.onText(/\/restartbot/, async (msg) => {
 });
 
 bot.onText(/\/update/, async (msg) => {
-    bot.sendMessage(msg.chat.id, '⏳ Sedang melakukan Git Pull...\n(Bot akan mati otomatis jika sedang jalan)');
-    
-    // 1. Stop bot dulu agar bash merespon
+    const chatId = msg.chat.id;
+    bot.sendMessage(chatId, '⏳ Memulai proses update...\nMematikan bot agar bisa melakukan git pull.');
+
+    // 1. Kirim sinyal stop
     await sendPowerAction('stop');
+
+    // 2. Loop cek status sampai offline
+    let isOffline = false;
+    let attempts = 0;
     
-    // Tunggu sebentar agar offline
-    setTimeout(async () => {
-        const success = await sendCommand('git pull origin master');
-        if (success) {
-            bot.sendMessage(msg.chat.id, '✅ Git Pull berhasil dikirim! Menyalakan bot kembali...');
-            setTimeout(() => sendPowerAction('start'), 5000);
-        } else {
-            bot.sendMessage(msg.chat.id, '❌ Gagal mengirim perintah git pull.');
+    const checkInterval = setInterval(async () => {
+        attempts++;
+        const status = await getServerStatus();
+        
+        if (status === 'offline') {
+            clearInterval(checkInterval);
+            bot.sendMessage(chatId, '✅ Server sudah Offline. Menarik update dari GitHub...');
+            
+            const success = await sendCommand('git pull');
+            if (success) {
+                bot.sendMessage(chatId, '✅ Git Pull berhasil! Menyalakan bot kembali...');
+                setTimeout(() => sendPowerAction('start'), 3000);
+            } else {
+                bot.sendMessage(chatId, '❌ Gagal mengirim perintah git pull. Coba lagi secara manual di panel.');
+            }
+        } else if (attempts >= 12) { // Maksimal 1 menit (12 * 5 detik)
+            clearInterval(checkInterval);
+            bot.sendMessage(chatId, '⚠️ Proses terlalu lama. Server belum offline. Silakan coba klik /update lagi nanti.');
         }
-    }, 10000);
+    }, 5000);
 });
 
 bot.onText(/\/logs/, async (msg) => {
